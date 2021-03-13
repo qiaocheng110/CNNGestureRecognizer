@@ -126,9 +126,11 @@ def binaryMask(frame, x0, y0, width, height, framecount, plot ):
     if saveImg == True:
         saveROIImg(res)
     elif guessGesture == True and (framecount % 5) == 4:
+        print("===guessGesture===")
         #ores = cv2.UMat.get(res)
         t = threading.Thread(target=myNN.guessGesture, args = [mod, res])
         t.start()
+        # myNN.guessGesture(mod,res)
     elif visualize == True:
         layer = int(input("Enter which layer to visualize "))
         cv2.waitKey(1)
@@ -173,9 +175,7 @@ def bkgrndSubMask(frame, x0, y0, width, height, framecount, plot):
     elif guessGesture == True and (framecount % 5) == 4:
         t = threading.Thread(target=myNN.guessGesture, args = [mod, res])
         t.start()
-        #t.join()
-        #myNN.update(plot)
-        
+
     elif visualize == True:
         layer = int(input("Enter which layer to visualize "))
         cv2.waitKey(0)
@@ -191,40 +191,12 @@ def bkgrndSubMask(frame, x0, y0, width, height, framecount, plot):
 def Main():
     global guessGesture, visualize, mod, binaryMode, bkgrndSubMode, mask, takebkgrndSubMask, x0, y0, width, height, saveImg, gestname, path
     quietMode = False
-    
     font = cv2.FONT_HERSHEY_SIMPLEX
     size = 0.5
     fx = 10
     fy = 350
     fh = 18
-
-        
-    #Call CNN model loading callback
-    while True:
-        ans = int(input( banner))
-        if ans == 1:
-            mod = myNN.loadCNN()
-            break
-        elif ans == 2:
-            mod = myNN.loadCNN(True)
-            myNN.trainModel(mod)
-            input("Press any key to continue")
-            break
-        elif ans == 3:
-            if not mod:
-                mod = myNN.loadCNN()
-            else:
-                print("Will load default weight file")
-            
-            myNN.visualizeLayers(mod)
-            input("Press any key to continue")
-            continue
-        
-        else:
-            print("Get out of here!!!")
-            return 0
-        
-    ## Grab camera input
+    mod = myNN.loadCNN() #LOAD THE MODEL
     cap = cv2.VideoCapture(0)
     cv2.namedWindow('Original', cv2.WINDOW_NORMAL)
 
@@ -237,7 +209,6 @@ def Main():
     start = time.time()
 
     plot = np.zeros((512,512,3), np.uint8)
-    
     while(True):
         ret, frame = cap.read()
         max_area = 0
@@ -272,28 +243,23 @@ def Main():
         cv2.putText(frame,'n - To enter name of new gesture folder',(fx,fy + 5*fh), font, size,(0,255,0),1,1)
         cv2.putText(frame,'s - To start capturing new gestures for training',(fx,fy + 6*fh), font, size,(0,255,0),1,1)
         cv2.putText(frame,'ESC - Exit',(fx,fy + 7*fh), font, size,(0,255,0),1,1)
-        
-        
-        ## If enabled will stop updating the main openCV windows
-        ## Way to reduce some processing power :)
+
         if not quietMode:
             cv2.imshow('Original',frame)
             cv2.imshow('ROI', roi)
 
             if guessGesture == True:
-                plot = np.zeros((512,512,3), np.uint8)
-                plot = myNN.update(plot)
-            
-            cv2.imshow('Gesture Probability',plot)
-            #plot = np.zeros((512,512,3), np.uint8)
+                f = open("./LivePlot/sample.txt", 'w')
+                myNN.update(f)
+
         
-        ############## Keyboard inputs ##################
-        key = cv2.waitKey(5) & 0xff
-        
+
+        key = cv2.waitKey(5) & 0xFF
+
         ## Use Esc key to close the program
         if key == 27:
             break
-        
+
         ## Use b key to toggle between binary threshold or skinmask based filters
         elif key == ord('b'):
             binaryMode = not binaryMode
@@ -314,13 +280,7 @@ def Main():
         elif key == ord('g'):
             guessGesture = not guessGesture
             print("Prediction Mode - {}".format(guessGesture))
-        
-        ## This option is not yet complete. So disabled for now
-        ## Use v key to visualize layers
-        #elif key == ord('v'):
-        #    visualize = True
 
-        ## Use i,j,k,l to adjust ROI window
         elif key == ord('i'):
             y0 = y0 - 5
         elif key == ord('k'):
@@ -352,16 +312,10 @@ def Main():
             try:
                 os.makedirs(gestname)
             except OSError as e:
-                # if directory already present
                 if e.errno != 17:
                     print('Some issue while creating the directory named -' + gestname)
             
             path = "./"+gestname+"/"
-        
-        #elif key != 255:
-        #    print key
-
-    #Realse & destroy
     cap.release()
     cv2.destroyAllWindows()
 

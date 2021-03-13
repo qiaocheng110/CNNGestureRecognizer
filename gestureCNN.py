@@ -6,18 +6,17 @@ Created on Thu Apr  6 01:01:43 2017
 @author: abhisheksingh
 """
 
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, Activation, Flatten
-from keras.layers import Conv2D, MaxPooling2D, ZeroPadding2D
-from keras.optimizers import SGD,RMSprop,adam
-from keras.utils import np_utils
-
-from keras import backend as K
-if K.backend() == 'tensorflow':
-    import tensorflow
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, Activation, Flatten
+from tensorflow.keras.layers import Conv2D, MaxPooling2D
+from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.optimizers  import  SGD
+from tensorflow.keras import backend as K
+# if K.backend() == 'tensorflow':
+#     import tensorflow
     #K.set_image_dim_ordering('tf')
-else:
-    import theano
+# else:
+#     import theano
     #K.set_image_dim_ordering('th')
 
 '''Ideally we should have changed image dim ordering based on Theano or Tensorflow, but for some reason I get following error when I switch it to 'tf' for Tensorflow.
@@ -26,7 +25,7 @@ else:
     ValueError: Negative dimension size caused by subtracting 3 from 1 for 'conv2d_1/convolution' (op: 'Conv2D') with input shapes: [?,1,200,200], [3,3,200,32].
 '''
 #K.set_image_dim_ordering('th')
-K.set_image_data_format('channels_first')
+# K.set_image_data_format('channels_first')
 	
 	
 import numpy as np
@@ -41,7 +40,6 @@ import json
 
 import cv2
 import matplotlib
-#matplotlib.use("TkAgg")
 from matplotlib import pyplot as plt
 
 # input image dimensions
@@ -61,7 +59,7 @@ batch_size = 32
 nb_classes = 5
 
 # Number of epochs to train (change it accordingly)
-nb_epoch = 15  #25
+nb_epoch = 25  #25
 
 # Total number of convolutional filters to use
 nb_filters = 32
@@ -88,22 +86,11 @@ jsonarray = {}
 
 #%%
 def update(plot):
-    global jsonarray
-    h = 450
-    y = 30
-    w = 45
-    font = cv2.FONT_HERSHEY_SIMPLEX
-
-    #plot = np.zeros((512,512,3), np.uint8)
-    
-    #array = {"OK": 65.79261422157288, "NOTHING": 0.7953541353344917, "PEACE": 5.33270463347435, "PUNCH": 0.038031660369597375, "STOP": 28.04129719734192}
-    
-    for items in jsonarray:
-        mul = (jsonarray[items]) / 100
-        #mul = random.randint(1,100) / 100
-        cv2.line(plot,(0,y),(int(h * mul),y),(255,0,0),w)
-        cv2.putText(plot,items,(0,y+5), font , 0.7,(0,255,0),2,1)
-        y = y + w + 30
+    global  jsonarray
+    js=json.dumps(jsonarray)
+    plot.write(js)
+    plot.flush()
+    plot.close()
 
     return plot
 
@@ -150,7 +137,7 @@ def loadCNN(bTraining = False):
     
     model.add(Conv2D(nb_filters, (nb_conv, nb_conv),
                         padding='valid',
-                        input_shape=(img_channels, img_rows, img_cols)))
+                        input_shape=(img_rows, img_cols,img_channels)))
     convout1 = Activation('relu')
     model.add(convout1)
     model.add(Conv2D(nb_filters, (nb_conv, nb_conv)))
@@ -166,7 +153,7 @@ def loadCNN(bTraining = False):
     model.add(Dense(nb_classes))
     model.add(Activation('softmax'))
     
-    #sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
+    sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
     model.compile(loss='categorical_crossentropy', optimizer='adadelta', metrics=['accuracy'])
     
     # Model summary
@@ -175,24 +162,15 @@ def loadCNN(bTraining = False):
     model.get_config()
     
     if not bTraining :
-        #List all the weight files available in current directory
-        WeightFileName = modlistdir('.','.hdf5')
-        if len(WeightFileName) == 0:
-            print('Error: No pretrained weight file found. Please either train the model or download one from the https://github.com/asingh33/CNNGestureRecognizer')
-            return 0
-        else:
-            print('Found these weight files - {}'.format(WeightFileName))
-        #Load pretrained weights
-        w = int(input("Which weight file to load (enter the INDEX of it, which starts from 0): "))
-        fname = WeightFileName[int(w)]
-        print("loading ", fname)
+        fname="./model/20210119.hdf5"
         model.load_weights(fname)
+
 
     # refer the last layer here
     layer = model.layers[-1]
-    get_output = K.function([model.layers[0].input, K.learning_phase()], [layer.output,])
-    
-    
+    # get_output = K.function([model.layers[0].input, K.learning_phase()], [layer.output,])
+    get_output = K.function([model.layers[0].input], [layer.output])
+
     return model
 
 # This function does the guessing work based on input images
@@ -202,7 +180,7 @@ def guessGesture(model, img):
     image = np.array(img).flatten()
     
     # reshape it
-    image = image.reshape(img_channels, img_rows,img_cols)
+    image = image.reshape(img_rows,img_cols,img_channels)
     
     # float32
     image = image.astype('float32') 
@@ -211,13 +189,11 @@ def guessGesture(model, img):
     image = image / 255
     
     # reshape for NN
-    rimage = image.reshape(1, img_channels, img_rows, img_cols)
+    rimage = image.reshape(1,img_rows, img_cols,img_channels)
     
-    # Now feed it to the NN, to fetch the predictions
-    #index = model.predict_classes(rimage)
-    #prob_array = model.predict_proba(rimage)
+
     
-    prob_array = get_output([rimage, 0])[0]
+    prob_array = get_output(rimage)[0] #预测属性结果
     #print('prob_array: ',prob_array)
     
     d = {}
@@ -229,20 +205,13 @@ def guessGesture(model, img):
     # Get the output with maximum probability
     import operator
     
-    guess = max(d.items(), key=operator.itemgetter(1))[0]
+    guess = max(d.items(), key=operator.itemgetter(1))[0]  #key 获取比较维度
     prob  = d[guess]
-
+    print("this is a good things for you ")
+    print("gestureCNN:", d)
     if prob > 60.0:
-        #print(guess + "  Probability: ", prob)
-
-        #Enable this to save the predictions in a json file,
-        #Which can be read by plotter app to plot bar graph
-        #dump to the JSON contents to the file
-        
-        #with open('gesturejson.txt', 'w') as outfile:
-        #    json.dump(d, outfile)
         jsonarray = d
-                
+        print("====jsonarray:data===:",jsonarray)
         return output.index(guess)
 
     else:
@@ -260,9 +229,9 @@ def initializers():
     total_images = len(imlist) # get the 'total' number of images
     
     # create matrix to store all flattened images
-    immatrix = np.array([np.array(Image.open(path2+ '/' + images).convert('L')).flatten()
+    immatrix = np.array([np.array(Image.open(path2+ '/' + images).convert('L')).flatten()  #gray change
                          for images in sorted(imlist)], dtype = 'f')
-    
+
 
     
     print(immatrix.shape)
@@ -301,9 +270,10 @@ def initializers():
      
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=4)
      
-    X_train = X_train.reshape(X_train.shape[0], img_channels, img_rows, img_cols)
-    X_test = X_test.reshape(X_test.shape[0], img_channels, img_rows, img_cols)
-     
+    # X_train = X_train.reshape(X_train.shape[0], img_channels, img_rows, img_cols)
+    # X_test = X_test.reshape(X_test.shape[0], img_channels, img_rows, img_cols)
+    X_train = X_train.reshape(X_train.shape[0], img_rows, img_cols,img_channels)
+    X_test = X_test.reshape(X_test.shape[0], img_rows, img_cols,img_channels)
     X_train = X_train.astype('float32')
     X_test = X_test.astype('float32')
      
@@ -312,8 +282,8 @@ def initializers():
     X_test /= 255
      
     # convert class vectors to binary class matrices
-    Y_train = np_utils.to_categorical(y_train, nb_classes)
-    Y_test = np_utils.to_categorical(y_test, nb_classes)
+    Y_train = to_categorical(y_train, nb_classes) #转换成二进制形式
+    Y_test = to_categorical(y_test, nb_classes)
     return X_train, X_test, Y_train, Y_test
 
 
@@ -399,7 +369,7 @@ def visualizeLayers(model):
         print('Guessed Gesture is {}'.format(output[guessGesture(model,image)]))
         
         # reshape it
-        image = image.reshape(img_channels, img_rows,img_cols)
+        image = image.reshape( img_rows,img_cols,img_channels)
         
         # float32
         image = image.astype('float32')
@@ -408,7 +378,7 @@ def visualizeLayers(model):
         image = image / 255
         
         # reshape for NN
-        input_image = image.reshape(1, img_channels, img_rows, img_cols)
+        input_image = image.reshape(1, img_rows, img_cols,img_channels)
     else:
         print('Wrong file index entered !!')
         return
@@ -422,7 +392,7 @@ def visualizeLayers(model):
     #output_image = output_fn(input_image)
     
     if layerIndex >= 1:
-        visualizeLayer(model,img,input_image, layerIndex)
+        visualizeLayer(model,img,input_image, layerIndex) #对选择的图片进行模型预测，并选择相应的哪一个层级输出
     else:
         tlayers = len(model.layers[:])
         print("Total layers - {}".format(tlayers))
@@ -468,4 +438,5 @@ def visualizeLayer(model, img, input_image, layerIndex):
     else:
         print("Can't dump data of this layer{}- {}".format(layerIndex, layer.__class__.__name__))
 
-
+# model=loadCNN(bTraining=True)
+# trainModel(model)
